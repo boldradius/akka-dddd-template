@@ -52,14 +52,14 @@ http://localhost:8080/bidHistory/123
 
 To start the cluster nodes (locally):
 
-sbt 'runMain com.boldradius.cqrs.ClusterNodeApp 127.0.0.1 2551'
+`sbt 'runMain com.boldradius.cqrs.ClusterNodeApp 127.0.0.1 2551'`
 
-sbt 'runMain com.boldradius.cqrs.ClusterNodeApp 127.0.0.1 2552'
+`sbt 'runMain com.boldradius.cqrs.ClusterNodeApp 127.0.0.1 2552'`
 
 
 
 To start the http node (Spray service):
-sbt 'runMain com.boldradius.cqrs.HttpApp 127.0.0.1 8080 127.0.0.1 0'
+`sbt 'runMain com.boldradius.cqrs.HttpApp 127.0.0.1 8080 127.0.0.1 0'`
 
 
 The args are documented in the corresponding files:
@@ -67,12 +67,17 @@ The args are documented in the corresponding files:
 **HttpApp.scala**
 
 
+In order to deploy to cloud (this app was tested on AWS), edit the application.conf accordingly
 
 Scala Version:  2.11.6
 
 Spray Version:  1.3.1
 
 Akka Version:   2.3.9
+
+
+
+
 
 
 
