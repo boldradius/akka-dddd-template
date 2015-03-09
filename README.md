@@ -15,7 +15,9 @@ The backing datastore is Cassandra. You have have this installed to run this app
 
 The Persistence Actors exist in an Akka Cluster, and are sharded according to auctionId.
 
-There is a Spray microservice accepting http requests and forwarding to cluster:
+
+
+####There is a Spray microservice accepting http requests and forwarding to cluster:
 
 Create Auction:
 
@@ -50,7 +52,9 @@ http://localhost:8080/bidHistory/123
 
 
 
-To start the cluster nodes (locally):
+
+
+####To start the cluster nodes (locally):
 
 `sbt 'runMain com.boldradius.cqrs.ClusterNodeApp 127.0.0.1 2551'`
 
@@ -58,22 +62,26 @@ To start the cluster nodes (locally):
 
 
 
-To start the http node (Spray service):
+
+
+####To start the http node (Spray service):
 `sbt 'runMain com.boldradius.cqrs.HttpApp 127.0.0.1 8080 127.0.0.1 0'`
 
 
 The args are documented in the corresponding files:
+
 **ClusterNodeApp.scala**
+
 **HttpApp.scala**
 
 
 In order to deploy to cloud (this app was tested on AWS), edit the application.conf accordingly
 
-Scala Version:  2.11.6
+####Scala Version:  2.11.6
 
-Spray Version:  1.3.1
+####Spray Version:  1.3.1
 
-Akka Version:   2.3.9
+####Akka Version:   2.3.9
 
 
 
