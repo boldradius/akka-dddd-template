@@ -7,9 +7,9 @@ This application demonstrates the use of Akka Persistence to implement CQRS/ES.
 
 The example domain is an online Auction.
 
-Auction creation and subsequent bids will be processed by the PersistentActor *BidProcessor*
+Auction creation and subsequent bids will be processed by the PersistentActor **BidProcessor**
 
-Queries about the current winning bid etc. are processed by the PersistentView *BidView*
+Queries about the current winning bid etc. are processed by the PersistentView **BidView**
 
 The backing datastore is Cassandra. You have have this installed to run this application.
 
@@ -63,8 +63,18 @@ sbt 'runMain com.boldradius.cqrs.HttpApp 127.0.0.1 8080 127.0.0.1 0'
 
 
 The args are documented in the corresponding files:
-*ClusterNodeApp.scala*
-*HttpApp.scala*
+**ClusterNodeApp.scala**
+**HttpApp.scala**
+
+
+
+Scala Version:  2.11.6
+
+Spray Version:  1.3.1
+
+Akka Version:   2.3.9
+
+
 
 
 
