@@ -65,12 +65,12 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
   /** passivate the entity when no activity */
   context.setReceiveTimeout(1 minute)
 
-  private var auctionStateMaybe: Option[AuctionBidState] = None
+  private var auctionStateMaybe: Option[Auction] = None
 
-  private def startMaybeState(auctionId: String, startTime: Long, endTime: Long, initialPrice: Double): Option[AuctionBidState] =
-    Some(AuctionBidState(auctionId, startTime, endTime, initialPrice, Nil, Nil, false))
+  private def startMaybeState(auctionId: String, startTime: Long, endTime: Long, initialPrice: Double): Option[Auction] =
+    Some(Auction(auctionId, startTime, endTime, initialPrice, Nil, Nil, false))
 
-  private def updateMaybeState(auctionId: String, f: AuctionBidState => AuctionBidState): Option[AuctionBidState] =
+  private def updateMaybeState(auctionId: String, f: Auction => Auction): Option[Auction] =
     auctionStateMaybe.flatMap(state => Some(f(state)))
 
   /**
@@ -95,13 +95,13 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
     }
   }
 
-  private def getCurrentBid(state: AuctionBidState): Double =
+  private def getCurrentBid(state: Auction): Double =
     state.acceptedBids match {
       case Bid(p, _, _) :: tail => p
       case _ => state.initialPrice
     }
 
-  override def receiveCommand: Receive =  withPassivation(initial).orElse(unknownCommand)
+  override def receiveCommand: Receive =  passivate(initial).orElse(unknownCommand)
 
   def initial: Receive = {
 
@@ -116,7 +116,7 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
           readRegion ! Update(await = true)
           auctionStateMaybe = startMaybeState(id, start, end, initialPrice)
           launchLifetime(end)
-          context.become(withPassivation(takingBids(id, start, end)).orElse(unknownCommand))
+          context.become(passivate(takingBids(id, start, end)).orElse(unknownCommand))
           sender() ! StartedAuctionAck(id)
         }
       }
@@ -130,7 +130,7 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
           readRegion ! Update(await = true)
           updateState(evt)
         }
-        context.become(withPassivation(auctionClosed(auctionId, currentTime)).orElse(unknownCommand))
+        context.become(passivate(auctionClosed(auctionId, currentTime)).orElse(unknownCommand))
 
     case a@PlaceBidCmd(id, buyer, bidPrice) => {
       val timestamp = System.currentTimeMillis()
@@ -177,22 +177,22 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
 
   def receiveRecover: Receive = {
     case evt: AuctionEvt => {
-      updateState(evt.logInfo("receiveRecover" + _.toString))
+      updateState(evt.logDebug("receiveRecover" + _.toString))
     }
 
     case RecoveryCompleted => {
-      auctionStateMaybe.fold[Unit]({}) { s =>
-        if (s.logInfo("receiveRecover RecoveryCompleted auctionStateMaybe: " + _.toString).ended)
-          context.become(withPassivation(auctionClosed(s.auctionId, s.endTime)).orElse(unknownCommand))
+      auctionStateMaybe.fold[Unit]({}) { auctionState =>
+        if (auctionState.logDebug("receiveRecover RecoveryCompleted auctionStateMaybe: " + _.toString).ended)
+          context.become(passivate(auctionClosed(auctionState.auctionId, auctionState.endTime)).orElse(unknownCommand))
         else{
-          launchLifetime(s.endTime)
-          context.become(withPassivation(takingBids(s.auctionId, s.startTime, s.endTime)).orElse(unknownCommand))
+          launchLifetime(auctionState.endTime)
+          context.become(passivate(takingBids(auctionState.auctionId, auctionState.startTime, auctionState.endTime)).orElse(unknownCommand))
         }
       }
     }
 
     case SnapshotOffer(_, snapshot) =>
-      auctionStateMaybe = snapshot.asInstanceOf[Option[AuctionBidState]].logInfo("recovery from snapshot auctionStateMaybe:" + _.toString)
+      auctionStateMaybe = snapshot.asInstanceOf[Option[Auction]].logDebug("recovery from snapshot auctionStateMaybe:" + _.toString)
   }
 
 

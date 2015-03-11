@@ -8,7 +8,7 @@ import akka.contrib.pattern.ShardRegion.Passivate
 trait Passivation extends Logging {
   this: Actor =>
 
-  protected def withPassivation(receive: Receive): Receive = receive.orElse{
+  protected def passivate(receive: Receive): Receive = receive.orElse{
     // tell parent actor to send us a poisinpill
     case ReceiveTimeout =>
       self.logDebug("ReceiveTimeout: passivating. " + _.toString)

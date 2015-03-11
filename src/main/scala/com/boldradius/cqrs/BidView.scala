@@ -23,10 +23,7 @@ import scala.concurrent.duration._
  *
  */
 
-/**  possible query example  */
-final case class  BidViewState(bidState:BidState, prodId:String)
-
-/**  another possible query example  */
+/**  state requred to satisfy queries  */
 final case class BidState(auctionId:String,
                     start:Long,
                     end:Long,
@@ -76,13 +73,13 @@ class BidView extends PersistentView with Logging with Passivation {
    * It will only process the AuctionStartedEvt or reply to the WinningBidPriceQuery
    *
    */
-  def receive: Receive = withPassivation(initial).orElse(unknownCommand)
+  def receive: Receive = passivate(initial).orElse(unknownCommand)
 
   def initial: Receive = {
 
     case e @ AuctionStartedEvt(auctionId, started, end,intialPrice, prodId) if isPersistent  =>
       val newState = BidState(auctionId,started,end,intialPrice)
-      context.become(withPassivation(auctionInProgress(newState,prodId)).orElse(unknownCommand))
+      context.become(passivate(auctionInProgress(newState,prodId)).orElse(unknownCommand))
 
     case  WinningBidPriceQuery(auctionId) =>
       sender ! AuctionNotStarted(auctionId)
@@ -108,16 +105,16 @@ class BidView extends PersistentView with Logging with Passivation {
 
     case e:  AuctionEndedEvt  =>
       val newState =  currentState.copy(closed = true)
-      context.become(withPassivation(auctionEnded(newState)))
+      context.become(passivate(auctionEnded(newState)))
 
     case BidPlacedEvt(auctionId,buyer,bidPrice,timeStamp) if isPersistent =>
         val newState =  currentState.copy(acceptedBids = Bid(bidPrice,buyer, timeStamp) :: currentState.acceptedBids)
-        context.become(withPassivation(auctionInProgress(newState,prodId)))
+        context.become(passivate(auctionInProgress(newState,prodId)))
 
 
     case BidRefusedEvt(auctionId,buyer,bidPrice,timeStamp) if isPersistent =>
       val newState =  currentState.copy(rejectedBids = Bid(bidPrice,buyer, timeStamp) :: currentState.rejectedBids)
-      context.become(withPassivation(auctionInProgress(newState,prodId)))
+      context.become(passivate(auctionInProgress(newState,prodId)))
 
   }
 
