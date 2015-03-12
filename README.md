@@ -6,10 +6,14 @@ Akka DDDD template using CQRS/ES with a Distributed Domain
 
 ### Distributed Domain Driven Design
 
-### CQRS/ESL  Command Query Responsibility Segregation
+### CQRS/ES  Command Query Responsibility Segregation / Event Sourcing
 
 This is a pattern that uses Command and Query objects to apply the [CQS](http://en.wikipedia.org/wiki/Command%E2%80%93query_separation) principle
         for modifying and retrieving data.
+
+Event Sourcing is an architectural pattern in which state is tracked with an immutable event log instead of
+destructive updates (mutable).
+        
 ## Getting Started
 
 To get this application going, you will need to:
