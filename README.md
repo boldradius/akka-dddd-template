@@ -114,18 +114,18 @@ The HTTP API enables the user to:
     "buyer":"dave",
     "bidPrice":6}
 
-    #### Query for the current winning bid
+#### Query for the current winning bid
 
     GET http://localhost:8080/winningBid/123
 
-    #### Query for the bid history
+#### Query for the bid history
 
     http://localhost:8080/bidHistory/123
 
-    ### Spray service fowards to the cluster
+### Spray service fowards to the cluster
 
-            The trait **HttpAuctionServiceRoute.scala** implements a route that takes ActorRefs (one for command and query) as input.
-            Upon receiving an Http request, it either sends a command message to the **command** actor, or a query message to the **query** actor.
+The trait **HttpAuctionServiceRoute.scala** implements a route that takes ActorRefs (one for command and query) as input.
+Upon receiving an Http request, it either sends a command message to the **command** actor, or a query message to the **query** actor.
 
      def route(command: ActorRef, query:ActorRef) = {
          post {
@@ -135,9 +135,9 @@ The HTTP API enables the user to:
                         auction => onComplete(
                             (command ? StartAuctionCmd(auction.auctionId,....
 
-    ## Exploring the Command path in the Cluster
+## Exploring the Command path in the Cluster
 
-    The command path is implemented in **BidProcessor.scala**. This is a **PersistentActor** that receives commands:
+The command path is implemented in **BidProcessor.scala**. This is a **PersistentActor** that receives commands:
 
     def initial: Receive = {
         case a@StartAuctionCmd(id, start, end, initialPrice, prodId) => ...
@@ -147,7 +147,7 @@ The HTTP API enables the user to:
                 case a@PlaceBidCmd(id, buyer, bidPrice) => ...
     }
 
-    and produces events, writing them to the event journal, and notifying the **Query** Path of the updated journal:
+and produces events, writing them to the event journal, and notifying the **Query** Path of the updated journal:
 
     val event = AuctionStartedEvt(id, start, end, initialPrice, prodId)   // the event to be persisted
     persistAsync(event) { evt =>                                          // block that will run once event has been written to journal
@@ -156,8 +156,8 @@ The HTTP API enables the user to:
     ...
     }
 
-                   This actor is cluster sharded on auctionId as follows:
-                <pre>`
+This actor is cluster sharded on auctionId as follows:
+
     val idExtractor: ShardRegion.IdExtractor = {
         case m: AuctionCmd => (m.auctionId, m)
     }
@@ -171,12 +171,12 @@ The HTTP API enables the user to:
                 This means, there is only one instance of this actor in the cluster, and all commands with the same **auctionId** will
                 be routed to the same actor.
 
-                 If this actor receives no commands for 1 minute, it will **passivate** ( a pattern enabling the parent to stop the actor, in order to reduce memory consumption without losing any commands it is currently processing):
+If this actor receives no commands for 1 minute, it will **passivate** ( a pattern enabling the parent to stop the actor, in order to reduce memory consumption without losing any commands it is currently processing):
 
     /** passivate the entity when no activity */
     context.setReceiveTimeout(1 minute)     // this will send a ReceiveTimeout message after one minute, if no other messages come in
 
-                The timeout is handled in the **Passivation.scala** trait:
+The timeout is handled in the **Passivation.scala** trait:
 
     protected def withPassivation(receive: Receive): Receive = receive.orElse{
         // tell parent actor to send us a poisinpill
@@ -187,8 +187,7 @@ The HTTP API enables the user to:
     }
 
 
-                   If this actor fails, or is passivated, and then is required again (to handle a command), the cluster will spin it up, and it will replay the
-                event journal, updating it's internal state:
+If this actor fails, or is passivated, and then is required again (to handle a command), the cluster will spin it up, and it will replay the event journal, updating it's internal state:
 
     def receiveRecover: Receive = {
         case evt: AuctionEvt => updateState(evt)
@@ -204,21 +203,20 @@ The HTTP API enables the user to:
             }
     }
 
-    ## Exploring the Query path in the Cluster
+## Exploring the Query path in the Cluster
 
-             The Queries are handled in a different Actor: **BidView.scala**. This is a **PersistentView** that handles query messages, or prompts from
-            it's companion **PersistentActor** to update itself.
+The Queries are handled in a different Actor: **BidView.scala**. This is a **PersistentView** that handles query messages, or prompts from it's companion **PersistentActor** to update itself.
 
-                **BidView.scala** is linked to the **BidProcessor.scala** event journal via it's **persistenceId**
-                <pre>`
+**BidView.scala** is linked to the **BidProcessor.scala** event journal via it's **persistenceId**
+
     override val persistenceId: String = "BidProcessor" + "-" + self.path.name
-        `</pre>
-            This means it has access to this event journal, and can maintain, and recover state from this journal.
 
-                It is possible for a PersistentView to save it's own snapshots, but, in our case, it isn't required.
+This means it has access to this event journal, and can maintain, and recover state from this journal.
 
-                This PersistentView is sharded in the same way the PersistentActor is:
-                 <pre>`
+It is possible for a PersistentView to save it's own snapshots, but, in our case, it isn't required.
+
+This PersistentView is sharded in the same way the PersistentActor is:
+
     val idExtractor: ShardRegion.IdExtractor = {
         case m : AuctionEvt => (m.auctionId,m)
         case m : BidQuery => (m.auctionId,m)
@@ -229,10 +227,10 @@ The HTTP API enables the user to:
         case m: BidQuery => (math.abs(m.auctionId.hashCode) % 100).toString
     }
 
-            One could have used a different shard strategy here, but a consequence of the above strategy is that the Query Path will
+One could have used a different shard strategy here, but a consequence of the above strategy is that the Query Path will
             reside in the same Shard Region as the command path, reducing latency of the Update() message from Command to Query.
 
-    The PersistentView maintains the following model in memory:
+The PersistentView maintains the following model in memory:
 
     final case class BidState(auctionId:String,
                              start:Long,
@@ -242,8 +240,7 @@ The HTTP API enables the user to:
                              rejectedBids:List[Bid],
                              closed:Boolean)
 
-            This model is sufficient to satisfy both queries: Winning Bid, and  Bid History:
-
+This model is sufficient to satisfy both queries: Winning Bid, and  Bid History:
 
       def auctionInProgress(currentState:BidState, prodId:String):Receive = {
 
@@ -253,7 +250,5 @@ The HTTP API enables the user to:
             currentState.acceptedBids.headOption.fold(
             sender ! WinningBidPriceResponse(auctionId,currentState.product))(b =>
             sender ! WinningBidPriceResponse(auctionId,b.price))
-
               ....
-
       }
