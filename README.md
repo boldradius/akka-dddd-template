@@ -33,9 +33,9 @@ As you can see, the default is localhost. In a cloud deployment, you could add s
 
 This application uses a simple domain to demonstrate CQRS and event sourcing with Akka Persistence. This domain is an online auction:
 
-final case class Bid(price:Double, buyer:String, timeStamp:Long)
+        final case class Bid(price:Double, buyer:String, timeStamp:Long)
 
-final case class Auction(auctionId:String,
+        final case class Auction(auctionId:String,
                              startTime:Long,
                              endTime:Long,
                              initialPrice:Double,
@@ -43,73 +43,70 @@ final case class Auction(auctionId:String,
                              refusedBids:List[Bid],
                              ended:Boolean)
 
-    This is a distributed application, leveraging **Akka Cluster**.
+This is a distributed application, leveraging **Akka Cluster**.
 
-    The **Command** path of this application is illustrated by the creation of an auction, and placing bids.
+The **Command** path of this application is illustrated by the creation of an auction, and placing bids.
 
-    The **Query** path of this application is illustrated by the querying of winning bid and bid history.
+The **Query** path of this application is illustrated by the querying of winning bid and bid history.
 
-    In order to distribute and segregate these paths, we leverage  **Akka Cluster**, as well as **Cluster Sharding**.
+In order to distribute and segregate these paths, we leverage  **Akka Cluster**, as well as **Cluster Sharding**.
 
-    Cluster Sharding enables the  distribution of the command and query actors across several nodes in the cluster,
-                supporting interaction using their logical identifier, without having to care about their physical location in the cluster.
+Cluster Sharding enables the  distribution of the command and query actors across several nodes in the cluster,
+supporting interaction using their logical identifier, without having to care about their physical location in the cluster.
 
-    ### Cluster Nodes
+### Cluster Nodes
 
-    You must first boot some cluster nodes (as many as you want). Running locally, these are distinguished by port  eg:[2551,2552,...].
+You must first boot some cluster nodes (as many as you want). Running locally, these are distinguished by port  eg:[2551,2552,...].
 
-                This cluster must specify one or more **seed nodes** in
-            **application.conf**
+This cluster must specify one or more **seed nodes** in **application.conf**
 
     akka.cluster {
     seed-nodes = [
     "akka.tcp://ClusterSystem@127.0.0.1:2551",
     "akka.tcp://ClusterSystem@127.0.0.1:2552"]
-
-    auto-down-unreachable-after = 10s
     }
 
-                The Cluster Nodes are bootstrapped in **ClusterNode.scala**.
+The Cluster Nodes are bootstrapped in **ClusterNode.scala**.
 
-                To boot each cluster node locally:
+To boot each cluster node locally:
 
     sbt 'runMain com.boldradius.cqrs.ClusterNodeApp nodeIpAddress port'
 
-    for example:
+for example:
 
     sbt 'runMain com.boldradius.cqrs.ClusterNodeApp 127.0.0.1 2551'
 
-    ### Http Microservice Node
+### Http Microservice Node
 
-     The HTTP front end is implemented as a **Spray** microservice and is bootstrapped in **HttpApp.scala**.It participates in the Cluster, but as a proxy.
+The HTTP front end is implemented as a **Spray** microservice and is bootstrapped in **HttpApp.scala**.It participates in the Cluster, but as a proxy.
 
-      To run the microservice locally:
+To run the microservice locally:
 
     sbt 'runMain com.boldradius.cqrs.HttpApp httpIpAddress httpPort akkaIpAddres akkaPort'
 
-    for example:
+for example:
 
     sbt 'runMain com.boldradius.cqrs.HttpApp 127.0.0.1 9000 127.0.0.1 0'
 
 
-    The HTTP API enables the user to:
+The HTTP API enables the user to:
 
 *   Create an Auction
 *   Place a did
 *   Query for the current winning bid
 *   Query for the bid history
 
-    #### Create Auction
+#### Create Auction
 
-     POST http://127.0.0.1:9000/startAuction
+        POST http://127.0.0.1:9000/startAuction
 
-     {"auctionId":"123",
-     "start":"2015-01-20-16:25",
-     "end":"2015-07-20-16:35",
-     "initialPrice" : 2,
-     "prodId" : "3"}
+        {"auctionId":"123",
+        "start":"2015-01-20-16:25",
+        "end":"2015-07-20-16:35",
+        "initialPrice" : 2,
+        "prodId" : "3"}
 
-    #### Place Bid
+#### Place Bid
 
     POST http://127.0.0.1:9000/bid
 
