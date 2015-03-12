@@ -2,7 +2,9 @@
 Akka DDDD template using CQRS/ES with a Distributed Domain
 
 Scala Version = 2.11.6
+
 Akka Version = 2.3.9
+
 Spray Version = 1.3.1
 
 
