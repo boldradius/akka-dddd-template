@@ -177,9 +177,8 @@ This actor is cluster sharded on auctionId as follows:
     }
 
     val shardName: String = "BidProcessor"
-                `</pre>
-                This means, there is only one instance of this actor in the cluster, and all commands with the same **auctionId** will
-                be routed to the same actor.
+
+This means, there is only one instance of this actor in the cluster, and all commands with the same  **auctionId** will be routed to the same actor.
 
 If this actor receives no commands for 1 minute, it will **passivate** ( a pattern enabling the parent to stop the actor, in order to reduce memory consumption without losing any commands it is currently processing):
 
