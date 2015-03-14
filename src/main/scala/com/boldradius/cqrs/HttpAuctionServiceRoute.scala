@@ -72,7 +72,7 @@ trait HttpAuctionServiceRoute extends HttpService with Logging{
               entity(as[PlaceBidDto]) {
                 bid => onComplete(
                   (command ? PlaceBidCmd(bid.auctionId, bid.buyer, bid.bidPrice)).mapTo[AuctionAck]) {
-                  case Success(ack) => ack.logDebug(s"PlaceBidCmd bid.bidPrice ${bid.bidPrice}" + _.auctionId.toString) match {
+                  case Success(ack) => ack.logDebug(s"PlaceBidCmd bid.bidPrice ${bid.bidPrice} id:" + _.auctionId.toString) match {
                     case PlacedBidAck(id, buyer, bidPrice, timeStamp) =>
                       complete(SuccessfulBidDto(id, bidPrice, fmt.print(timeStamp)))
                     case RefusedBidAck(id, buyer, bidPrice, winningBid) =>

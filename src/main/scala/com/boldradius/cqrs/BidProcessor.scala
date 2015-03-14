@@ -2,7 +2,7 @@ package com.boldradius.cqrs
 
 import akka.actor._
 import akka.contrib.pattern.ShardRegion
-import akka.contrib.pattern.ShardRegion.Passivate
+
 import akka.persistence.{RecoveryCompleted, PersistentActor, SnapshotOffer, Update}
 import AuctionCommandQueryProtocol._
 import com.boldradius.util.Logging
@@ -49,7 +49,7 @@ object BidProcessor {
     case m: AuctionCmd => (m.auctionId, m)
   }
 
-  val shardResolver: ShardRegion.ShardResolver = msg => msg match {
+  val shardResolver: ShardRegion.ShardResolver = {
     case m: AuctionCmd => (math.abs(m.auctionId.hashCode) % 100).toString
   }
 
@@ -129,10 +129,6 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
     }
   }
 
-
-
-
-
   override def receiveCommand: Receive = passivate(initial).orElse(unknownCommand)
 
   def initial: Receive = {
@@ -151,7 +147,7 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
         handleProcessedCommand(sender(),
           ProcessedCommand(
             Some(AuctionStartedEvt(id, start, end, initialPrice, prodId)),
-            InvalidAuctionAck(id, "This auction is already over"), Some(passivate(takingBids(id, start, end)).orElse(unknownCommand)))
+            StartedAuctionAck(id), Some(passivate(takingBids(id, start, end)).orElse(unknownCommand)))
         )
       }
   }
