@@ -18,7 +18,7 @@ import scala.concurrent.duration._
  * Once the events are persisted, the corresponding view is prompted to update itself from this journal
  * with Update()
  *
- * The state of the auction is encoded in the var auctionStateMaybe: Option[AuctionBidState]
+ * For recovery, the state of the auction is encoded in the var auctionStateMaybe: Option[AuctionBidState]
  *
  * A tick message is scheduled to signal the end of the auction
  *
