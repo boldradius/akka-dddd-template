@@ -114,7 +114,7 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
   def handleProcessedCommand(sendr: ActorRef, processedCommand: ProcessedCommand): Unit = {
 
     processedCommand.event.fold(sender() ! processedCommand.ack) { evt =>
-      persist(evt) { persistedEvt =>
+      persist(evt.logDebug("+++++++++++++  evt = " + _.toString)) { persistedEvt =>
         readRegion ! Update(await = true)
         sendr ! processedCommand.ack
         processedCommand.newReceive.fold({})(context.become)

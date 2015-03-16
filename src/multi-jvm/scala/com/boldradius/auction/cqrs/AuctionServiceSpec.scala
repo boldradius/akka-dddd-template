@@ -1,7 +1,8 @@
 package com.boldradius.cqrs
 
 import java.io.File
-import AuctionCommandQueryProtocol.{PlaceBidCmd, WinningBidPriceResponse, WinningBidPriceQuery, StartAuctionCmd}
+import java.util.UUID
+import com.boldradius.cqrs.AuctionCommandQueryProtocol._
 import scala.concurrent.duration._
 import org.apache.commons.io.FileUtils
 import com.typesafe.config.ConfigFactory
@@ -109,18 +110,24 @@ class AuctionServiceSpec extends MultiNodeSpec(AuctionServiceSpec)
       enterBarrier("after-2")
     }
 
-    val auctionId = "45902e35-4acb-4dc2-9109-73a9126b604f"
+    val auctionId = UUID.randomUUID().toString
 
     "start auction" in within(15.seconds) {
 
       val now = System.currentTimeMillis()
 
-      runOn(node1) {
+      runOn(node1,node2) {
         val auctionRegion = ClusterSharding(system).shardRegion(BidProcessor.shardName)
-        auctionRegion ! StartAuctionCmd(auctionId,now + 1000,now + 1000000,1,"1")
+        awaitAssert {
+          within(5.second) {
+            auctionRegion ! StartAuctionCmd(auctionId,now + 1000,now + 1000000,1,"1")
+            expectMsg( StartedAuctionAck(auctionId))
+          }
+        }
+
       }
 
-      runOn(node2) {
+      runOn(node1,node2) {
         val auctionViewRegion = ClusterSharding(system).shardRegion(BidView.shardName)
         awaitAssert {
           within(5.second) {
@@ -134,14 +141,12 @@ class AuctionServiceSpec extends MultiNodeSpec(AuctionServiceSpec)
 
     "bid on auction" in within(15.seconds) {
 
-      val now = System.currentTimeMillis()
-
-      runOn(node1) {
+      runOn(node1,node2) {
         val auctionRegion = ClusterSharding(system).shardRegion(BidProcessor.shardName)
         auctionRegion ! PlaceBidCmd(auctionId,"dave",3)
       }
 
-      runOn(node2) {
+      runOn(node2,node2) {
         val auctionViewRegion = ClusterSharding(system).shardRegion(BidView.shardName)
         awaitAssert {
           within(5.second) {
