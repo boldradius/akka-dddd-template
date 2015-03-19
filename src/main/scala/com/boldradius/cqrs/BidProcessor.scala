@@ -113,8 +113,9 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
    */
   def handleProcessedCommand(sendr: ActorRef, processedCommand: ProcessedCommand): Unit = {
 
+    // ack whether there is an event or not
     processedCommand.event.fold(sender() ! processedCommand.ack) { evt =>
-      persist(evt.logDebug("+++++++++++++  evt = " + _.toString)) { persistedEvt =>
+      persist(evt) { persistedEvt =>
         readRegion ! Update(await = true)
         sendr ! processedCommand.ack
         processedCommand.newReceive.fold({})(context.become)
@@ -166,17 +167,20 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
           val currentPrice = getCurrentBid(state)
           if (bidPrice > currentPrice) {
             // Successful bid
+            val evt = BidPlacedEvt(id, buyer, bidPrice, timestamp)
             ProcessedCommand(
-              Some(BidPlacedEvt(id, buyer, bidPrice, timestamp)),
+              Some(evt),
               PlacedBidAck(id, buyer, bidPrice, timestamp),
-              None
+              // update state
+              Some(passivate(takingBids(updateState(evt,state))).orElse(unknownCommand))
             )
           } else {
             //Unsuccessful bid
+            val evt = BidRefusedEvt(id, buyer, bidPrice, timestamp)
             ProcessedCommand(
-              Some(BidRefusedEvt(id, buyer, bidPrice, timestamp)),
+              Some(evt),
               RefusedBidAck(id, buyer, bidPrice, currentPrice),
-              None
+              Some(passivate(takingBids(updateState(evt,state))).orElse(unknownCommand))
             )
           }
         } else if (timestamp > state.endTime) {
