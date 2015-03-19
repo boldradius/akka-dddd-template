@@ -159,13 +159,17 @@ The command path is implemented in **BidProcessor.scala**. This is a **Persisten
 
 and produces events, writing them to the event journal, and notifying the **Query** Path of the updated journal:
 
-    val event = AuctionStartedEvt(id, start, end, initialPrice, prodId)   // the event to be persisted
-    persistAsync(event) { evt =>                                          // block that will run once event has been written to journal
-    readRegion ! Update(await = true)                                   // update the Query path
-    auctionStateMaybe = startMaybeState(id, start, end, initialPrice)   // update internal state
-    ...
-    }
+    def handleProcessedCommand(sendr: ActorRef, processedCommand: ProcessedCommand): Unit = {
 
+    // ack whether there is an event or not
+    processedCommand.event.fold(sender() ! processedCommand.ack) { evt =>
+      persist(evt) { persistedEvt =>
+        readRegion ! Update(await = true)
+        sendr ! processedCommand.ack
+        processedCommand.newReceive.fold({})(context.become)
+       }
+     }
+   }
 This actor is cluster sharded on auctionId as follows:
 
     val idExtractor: ShardRegion.IdExtractor = {
