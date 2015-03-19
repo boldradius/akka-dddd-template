@@ -196,7 +196,7 @@ The timeout is handled in the **Passivation.scala** trait:
     }
 
 
-If this actor fails, or is passivated, and then is required again (to handle a command), the cluster will spin it up, and it will replay the event journal, updating it's internal state:
+If this actor fails, or is passivated, and then is required again (to handle a command), the cluster will spin it up, and it will replay the event journal. In this case we make use a var: auctionRecoverStateMaybe to capture the state while we replay. When the replay is finished, the actor is notified with the RecoveryCompleted message and we can then "become" appropriately to reflect this state. 
 
     def receiveRecover: Receive = {
         case evt:AuctionStartedEvt =>
