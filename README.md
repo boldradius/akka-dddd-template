@@ -161,15 +161,16 @@ and produces events, writing them to the event journal, and notifying the **Quer
 
     def handleProcessedCommand(sendr: ActorRef, processedCommand: ProcessedCommand): Unit = {
 
-    // ack whether there is an event or not
-    processedCommand.event.fold(sender() ! processedCommand.ack) { evt =>
-      persist(evt) { persistedEvt =>
-        readRegion ! Update(await = true)
-        sendr ! processedCommand.ack
-        processedCommand.newReceive.fold({})(context.become)
-       }
-     }
-   }
+            // ack whether there is an event or not
+            processedCommand.event.fold(sender() ! processedCommand.ack) { evt =>
+              persist(evt) { persistedEvt =>
+                readRegion ! Update(await = true)
+                sendr ! processedCommand.ack
+                processedCommand.newReceive.fold({})(context.become)
+               }
+             }
+        }
+   
 This actor is cluster sharded on auctionId as follows:
 
     val idExtractor: ShardRegion.IdExtractor = {
