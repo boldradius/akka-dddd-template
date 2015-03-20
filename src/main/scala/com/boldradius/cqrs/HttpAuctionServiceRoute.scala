@@ -4,7 +4,7 @@ import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
 import com.boldradius.cqrs.AuctionCommandQueryProtocol._
-import com.boldradius.util.Logging
+import com.boldradius.util.LLogging
 import org.joda.time.format.DateTimeFormat
 import spray.routing._
 
@@ -29,7 +29,7 @@ final case class BidHistoryDto(auctionId:String,bids: List[BidDto],response:Stri
 
 
 
-trait HttpAuctionServiceRoute extends HttpService with Logging{
+trait HttpAuctionServiceRoute extends HttpService with LLogging{
 
 
 
@@ -72,7 +72,7 @@ trait HttpAuctionServiceRoute extends HttpService with Logging{
               entity(as[PlaceBidDto]) {
                 bid => onComplete(
                   (command ? PlaceBidCmd(bid.auctionId, bid.buyer, bid.bidPrice)).mapTo[AuctionAck]) {
-                  case Success(ack) => ack.logDebug(s"PlaceBidCmd bid.bidPrice ${bid.bidPrice} id:" + _.auctionId.toString) match {
+                  case Success(ack) => ack.logInfo(s"PlaceBidCmd bid.bidPrice ${bid.bidPrice} id:" + _.auctionId.toString) match {
                     case PlacedBidAck(id, buyer, bidPrice, timeStamp) =>
                       complete(SuccessfulBidDto(id, bidPrice, fmt.print(timeStamp)))
                     case RefusedBidAck(id, buyer, bidPrice, winningBid) =>

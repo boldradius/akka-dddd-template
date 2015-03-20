@@ -5,7 +5,7 @@ import akka.contrib.pattern.ShardRegion
 
 import akka.persistence.{RecoveryCompleted, PersistentActor, SnapshotOffer, Update}
 import AuctionCommandQueryProtocol._
-import com.boldradius.util.Logging
+import com.boldradius.util.ALogging
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -56,7 +56,7 @@ object BidProcessor {
   val shardName: String = "BidProcessor"
 }
 
-class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivation with Logging {
+class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivation with ALogging {
 
   import BidProcessor._
 
@@ -127,7 +127,7 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
 
   def initial: Receive = {
 
-    case a@StartAuctionCmd(id, start, end, initialPrice, prodId) =>
+    case StartAuctionCmd(id, start, end, initialPrice, prodId) =>
       val currentTime = System.currentTimeMillis()
 
       if (currentTime >= end) {
@@ -159,7 +159,7 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
       }
 
 
-    case a@PlaceBidCmd(id, buyer, bidPrice) => {
+    case PlaceBidCmd(id, buyer, bidPrice) => {
       val timestamp = System.currentTimeMillis()
 
       handleProcessedCommand(sender(),
@@ -203,18 +203,19 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
 
   def receiveRecover: Receive = {
     case evt: AuctionStartedEvt =>
-      auctionRecoverStateMaybe = Some(Auction(evt.auctionId, evt.started, evt.end, evt.initialPrice, Nil, Nil, false))
+      auctionRecoverStateMaybe =
+        Some(Auction(evt.logInfo("receiveRecover evt:" + _.toString).auctionId, evt.started, evt.end, evt.initialPrice, Nil, Nil, false))
 
     case evt: AuctionEvt => {
       auctionRecoverStateMaybe = auctionRecoverStateMaybe.map(state =>
-        updateState(evt.logDebug("receiveRecover" + _.toString), state))
+        updateState(evt.logInfo("receiveRecover evt:" + _.toString), state))
     }
 
     case RecoveryCompleted => postRecoveryBecome(auctionRecoverStateMaybe)
 
     // if snapshots are implemented, currently the aren't.
     case SnapshotOffer(_, snapshot) =>
-      postRecoveryBecome(snapshot.asInstanceOf[Option[Auction]].logDebug("recovery from snapshot state:" + _.toString))
+      postRecoveryBecome(snapshot.asInstanceOf[Option[Auction]].logInfo("recovery from snapshot state:" + _.toString))
   }
 
 
@@ -223,7 +224,8 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
    */
   def postRecoveryBecome(auctionRecoverStateMaybe: Option[Auction]): Unit =
     auctionRecoverStateMaybe.fold[Unit]({}) { auctionState =>
-      if (auctionState.logDebug("receiveRecover RecoveryCompleted state: " + _.toString).ended)
+      log.info("postRecoveryBecome")
+      if (auctionState.ended)
         context.become(passivate(auctionClosed(auctionState)).orElse(unknownCommand))
       else {
         launchLifetime(auctionState.endTime)
@@ -234,14 +236,14 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
 
   def unknownCommand: Receive = {
     case other => {
-      other.logDebug("unknownCommand: " + _.toString)
+      other.logInfo("unknownCommand: " + _.toString)
       sender() ! InvalidAuctionAck("", "InvalidAuctionAck")
     }
   }
 
   /** auction lifetime tick will send message when auction is over */
   def launchLifetime(time: Long) = {
-    val auctionEnd = (time - System.currentTimeMillis()).logDebug("launchLifetime over in:" + _.toString + "ms")
+    val auctionEnd = (time - System.currentTimeMillis()).logInfo("launchLifetime over in:" + _.toString + "ms")
     if (auctionEnd > 0) {
       context.system.scheduler.scheduleOnce(auctionEnd.milliseconds, self, Tick)
     }

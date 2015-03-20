@@ -209,13 +209,13 @@ If this actor fails, or is passivated, and then is required again (to handle a c
 
             case evt: AuctionEvt => {
               auctionRecoverStateMaybe = auctionRecoverStateMaybe.map(state =>
-                updateState(evt.logDebug("receiveRecover" + _.toString),state))
+                updateState(evt.logInfo("receiveRecover" + _.toString),state))
             }
         
             // Once recovery is complete, check the state to become the appropriate behaviour
             case RecoveryCompleted => {
               auctionRecoverStateMaybe.fold[Unit]({}) { auctionState =>
-                if (auctionState.logDebug("receiveRecover RecoveryCompleted state: " + _.toString).ended)
+                if (auctionState.logInfo("receiveRecover RecoveryCompleted state: " + _.toString).ended)
                   context.become(passivate(auctionClosed(auctionState)).orElse(unknownCommand))
                 else {
                   launchLifetime(auctionState.endTime)

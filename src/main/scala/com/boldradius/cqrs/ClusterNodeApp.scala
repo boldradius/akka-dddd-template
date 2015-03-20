@@ -1,7 +1,6 @@
 package com.boldradius.cqrs
 
 import akka.actor.ActorSystem
-import com.boldradius.util.Logging
 import com.typesafe.config._
 
 /**

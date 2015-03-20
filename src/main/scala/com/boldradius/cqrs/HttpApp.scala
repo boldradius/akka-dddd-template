@@ -1,7 +1,6 @@
 package com.boldradius.cqrs
 
 import akka.actor._
-import com.boldradius.util.Logging
 import spray.routing._
 
 import com.typesafe.config.ConfigFactory

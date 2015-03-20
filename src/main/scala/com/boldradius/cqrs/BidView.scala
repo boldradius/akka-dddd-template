@@ -5,7 +5,7 @@ import akka.contrib.pattern.ShardRegion
 import akka.persistence.PersistentView
 import AuctionCommandQueryProtocol._
 import com.boldradius.cqrs.BidProcessor._
-import com.boldradius.util.Logging
+import com.boldradius.util.ALogging
 import scala.concurrent.duration._
 
 
@@ -57,7 +57,7 @@ object BidView {
 /**
  * The Query Actor
  */
-class BidView extends PersistentView with Logging with Passivation {
+class BidView extends PersistentView with ALogging with Passivation {
 
   override val viewId: String = self.path.parent.name + "-" + self.path.name
 
