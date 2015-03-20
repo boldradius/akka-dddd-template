@@ -153,19 +153,24 @@ The command path is implemented in **BidProcessor.scala**. This is a **Persisten
         case a@StartAuctionCmd(id, start, end, initialPrice, prodId) => ...
     }
 
-    def takingBids(auctionId: String, startTime: Long, closeTime: Long): Receive = {
+    def takingBids(state: Auction): Receive = {
                 case a@PlaceBidCmd(id, buyer, bidPrice) => ...
     }
 
 and produces events, writing them to the event journal, and notifying the **Query** Path of the updated journal:
 
-    val event = AuctionStartedEvt(id, start, end, initialPrice, prodId)   // the event to be persisted
-    persistAsync(event) { evt =>                                          // block that will run once event has been written to journal
-    readRegion ! Update(await = true)                                   // update the Query path
-    auctionStateMaybe = startMaybeState(id, start, end, initialPrice)   // update internal state
-    ...
-    }
+    def handleProcessedCommand(sendr: ActorRef, processedCommand: ProcessedCommand): Unit = {
 
+            // ack whether there is an event or not
+            processedCommand.event.fold(sender() ! processedCommand.ack) { evt =>
+              persist(evt) { persistedEvt =>
+                readRegion ! Update(await = true)
+                sendr ! processedCommand.ack
+                processedCommand.newReceive.fold({})(context.become)
+               }
+             }
+        }
+   
 This actor is cluster sharded on auctionId as follows:
 
     val idExtractor: ShardRegion.IdExtractor = {
@@ -196,21 +201,28 @@ The timeout is handled in the **Passivation.scala** trait:
     }
 
 
-If this actor fails, or is passivated, and then is required again (to handle a command), the cluster will spin it up, and it will replay the event journal, updating it's internal state:
+If this actor fails, or is passivated, and then is required again (to handle a command), the cluster will spin it up, and it will replay the event journal. In this case we make use a var: auctionRecoverStateMaybe to capture the state while we replay. When the replay is finished, the actor is notified with the RecoveryCompleted message and we can then "become" appropriately to reflect this state. 
 
     def receiveRecover: Receive = {
-        case evt: AuctionEvt => updateState(evt)
+        case evt:AuctionStartedEvt =>
+                auctionRecoverStateMaybe = Some(Auction(evt.auctionId,evt.started,evt.end,evt.initialPrice,Nil,Nil,false))
 
-        case RecoveryCompleted => {
-            auctionStateMaybe.fold[Unit]({}) { auctionState =>
-                if (auctionState.ended)
-                    context.become(passivate(auctionClosed(auctionState.auctionId, auctionState.endTime)).orElse(unknownCommand))
-                else{
-                    context.become(passivate(takingBids(auctionState.auctionId, auctionState.startTime, auctionState.endTime)).orElse(unknownCommand))
-                    }
-                }
+            case evt: AuctionEvt => {
+              auctionRecoverStateMaybe = auctionRecoverStateMaybe.map(state =>
+                updateState(evt.logDebug("receiveRecover" + _.toString),state))
             }
-    }
+        
+            // Once recovery is complete, check the state to become the appropriate behaviour
+            case RecoveryCompleted => {
+              auctionRecoverStateMaybe.fold[Unit]({}) { auctionState =>
+                if (auctionState.logDebug("receiveRecover RecoveryCompleted state: " + _.toString).ended)
+                  context.become(passivate(auctionClosed(auctionState)).orElse(unknownCommand))
+                else {
+                  launchLifetime(auctionState.endTime)
+                  context.become(passivate(takingBids(auctionState)).orElse(unknownCommand))
+                }
+              }
+            }
 
 ## Exploring the Query path in the Cluster
 
