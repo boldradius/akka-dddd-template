@@ -79,7 +79,7 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
   /**
    * Updates Auction state
    */
-  private def updateState(evt: AuctionEvt, state:Auction): Auction = {
+  private def updateState(evt: AuctionEvt, state: Auction): Auction = {
 
     evt match {
       case AuctionEndedEvt(auctionId: String, timeStamp) =>
@@ -116,9 +116,9 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
     // ack whether there is an event or not
     processedCommand.event.fold(sender() ! processedCommand.ack) { evt =>
       persist(evt) { persistedEvt =>
-        readRegion ! Update(await = true)
+        readRegion ! Update(await = true) // update read path
         sendr ! processedCommand.ack
-        processedCommand.newReceive.fold({})(context.become)
+        processedCommand.newReceive.fold()(context.become) // maybe change state
       }
     }
   }
@@ -155,7 +155,7 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
       val currentTime = System.currentTimeMillis()
       persist(AuctionEndedEvt(state.auctionId, currentTime)) { evt =>
         readRegion ! Update(await = true)
-        context.become(passivate(auctionClosed(updateState(evt,state))).orElse(unknownCommand))
+        context.become(passivate(auctionClosed(updateState(evt, state))).orElse(unknownCommand))
       }
 
 
@@ -172,7 +172,7 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
               Some(evt),
               PlacedBidAck(id, buyer, bidPrice, timestamp),
               // update state
-              Some(passivate(takingBids(updateState(evt,state))).orElse(unknownCommand))
+              Some(passivate(takingBids(updateState(evt, state))).orElse(unknownCommand))
             )
           } else {
             //Unsuccessful bid
@@ -180,7 +180,7 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
             ProcessedCommand(
               Some(evt),
               RefusedBidAck(id, buyer, bidPrice, currentPrice),
-              Some(passivate(takingBids(updateState(evt,state))).orElse(unknownCommand))
+              Some(passivate(takingBids(updateState(evt, state))).orElse(unknownCommand))
             )
           }
         } else if (timestamp > state.endTime) {
@@ -193,7 +193,7 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
     }
   }
 
-  def auctionClosed(state:Auction): Receive = {
+  def auctionClosed(state: Auction): Receive = {
     case a: PlaceBidCmd => sender() ! AuctionEndedAck(state.auctionId)
     case a: StartAuctionCmd => sender() ! AuctionEndedAck(state.auctionId)
   }
@@ -202,29 +202,34 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
   private var auctionRecoverStateMaybe: Option[Auction] = None
 
   def receiveRecover: Receive = {
-    case evt:AuctionStartedEvt =>
-      auctionRecoverStateMaybe = Some(Auction(evt.auctionId,evt.started,evt.end,evt.initialPrice,Nil,Nil,false))
+    case evt: AuctionStartedEvt =>
+      auctionRecoverStateMaybe = Some(Auction(evt.auctionId, evt.started, evt.end, evt.initialPrice, Nil, Nil, false))
 
     case evt: AuctionEvt => {
       auctionRecoverStateMaybe = auctionRecoverStateMaybe.map(state =>
-        updateState(evt.logDebug("receiveRecover" + _.toString),state))
+        updateState(evt.logDebug("receiveRecover" + _.toString), state))
     }
 
-    // Once recovery is complete, check the state to become the appropriate behaviour
-    case RecoveryCompleted => {
-      auctionRecoverStateMaybe.fold[Unit]({}) { auctionState =>
-        if (auctionState.logDebug("receiveRecover RecoveryCompleted state: " + _.toString).ended)
-          context.become(passivate(auctionClosed(auctionState)).orElse(unknownCommand))
-        else {
-          launchLifetime(auctionState.endTime)
-          context.become(passivate(takingBids(auctionState)).orElse(unknownCommand))
-        }
+    case RecoveryCompleted => postRecoveryBecome(auctionRecoverStateMaybe)
+
+    // if snapshots are implemented, currently the aren't.
+    case SnapshotOffer(_, snapshot) =>
+      postRecoveryBecome(snapshot.asInstanceOf[Option[Auction]].logDebug("recovery from snapshot state:" + _.toString))
+  }
+
+
+  /**
+   * Once recovery is complete, check the state to become the appropriate behaviour
+   */
+  def postRecoveryBecome(auctionRecoverStateMaybe: Option[Auction]): Unit =
+    auctionRecoverStateMaybe.fold[Unit]({}) { auctionState =>
+      if (auctionState.logDebug("receiveRecover RecoveryCompleted state: " + _.toString).ended)
+        context.become(passivate(auctionClosed(auctionState)).orElse(unknownCommand))
+      else {
+        launchLifetime(auctionState.endTime)
+        context.become(passivate(takingBids(auctionState)).orElse(unknownCommand))
       }
     }
-
-    case SnapshotOffer(_, snapshot) =>
-      auctionRecoverStateMaybe = snapshot.asInstanceOf[Option[Auction]].logDebug("recovery from snapshot state:" + _.toString)
-  }
 
 
   def unknownCommand: Receive = {
