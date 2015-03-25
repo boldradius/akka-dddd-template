@@ -12,6 +12,8 @@ Spray Version = 1.3.1
 
 ### Distributed Domain Driven Design
 
+Distributed Domain Driven Design takes the existing DDD concept and applies it ot an application intended to have each domain instance represented by an actor, as opposed to a class instance that must be synchronized via a backing persistent store. In this pattern, each domain instance is a cluster singleton, meaning updates can be made to it's state without fear of conflict.
+
 ### CQRS/ES  Command Query Responsibility Segregation / Event Sourcing
 
 This is a pattern that uses Command and Query objects to apply the [CQS](http://en.wikipedia.org/wiki/Command%E2%80%93query_separation) principle
