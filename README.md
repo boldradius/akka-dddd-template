@@ -128,11 +128,11 @@ The HTTP API enables the user to:
 
 #### Query for the current winning bid
 
-    GET http://localhost:8080/winningBid/123
+    GET http://127.0.0.1:9000/winningBid/123
 
 #### Query for the bid history
 
-    http://localhost:8080/bidHistory/123
+    http://127.0.0.1:9000/bidHistory/123
 
 ### Spray service fowards to the cluster
 
