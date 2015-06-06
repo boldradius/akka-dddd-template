@@ -104,7 +104,7 @@ for example:
 The HTTP API enables the user to:
 
 *   Create an Auction
-*   Place a did
+*   Place a bid
 *   Query for the current winning bid
 *   Query for the bid history
 
