@@ -32,7 +32,7 @@ To get this application going, you will need to:
 
 ### DataStore
 
-This application requires a distributed journal. Storage backends for journals and snapshot stores are pluggable in Akka persistence. In this case we are using [Cassandra](http://cassandra.apache.org/download/).
+This application requires a distributed journal. Storage backends for journals and snapshot stores are pluggable in Akka persistence. In this case we are using [Cassandra](http://cassandra.apache.org/download/).  For test & development purposes you may want to use the [Cassandra 3.9 docker image](https://hub.docker.com/_/cassandra/) defined in the `docker-compose.yml` file accompanying this project.
 You can find other journal plugins [here](http://akka.io/community/?_ga=1.264939791.1443869017.1408561680).
 
 The datastore is specified in **reference.conf** (create an application.conf to override defaults)
