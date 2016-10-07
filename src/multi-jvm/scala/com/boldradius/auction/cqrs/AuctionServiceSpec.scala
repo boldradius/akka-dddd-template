@@ -2,7 +2,9 @@ package com.boldradius.cqrs
 
 import java.io.File
 import java.util.UUID
+
 import com.boldradius.cqrs.AuctionCommandQueryProtocol._
+
 import scala.concurrent.duration._
 import org.apache.commons.io.FileUtils
 import com.typesafe.config.ConfigFactory
@@ -10,7 +12,7 @@ import akka.actor.ActorIdentity
 import akka.actor.Identify
 import akka.actor.Props
 import akka.cluster.Cluster
-import akka.contrib.pattern.ClusterSharding
+import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
 import akka.persistence.Persistence
 import akka.persistence.journal.leveldb.SharedLeveldbJournal
 import akka.persistence.journal.leveldb.SharedLeveldbStore
@@ -31,6 +33,7 @@ object AuctionServiceSpec extends MultiNodeConfig {
       native = off
       dir = "target/test-shared-journal"
     }
+    akka.persistence.snapshot-store.plugin = "akka.persistence.snapshot-store.local"
     akka.persistence.snapshot-store.local.dir = "target/test-snapshots"
     """))
 }
@@ -75,14 +78,16 @@ class AuctionServiceSpec extends MultiNodeSpec(AuctionServiceSpec)
 
     val view = ClusterSharding(system).start(
       typeName = BidView.shardName,
-      entryProps = Some(BidView.props),
-      idExtractor = BidView.idExtractor,
-      shardResolver = BidView.shardResolver)
+      entityProps = BidView.props,
+      settings = ClusterShardingSettings(system),
+      extractEntityId = BidView.entityIdExtractor,
+      extractShardId = BidView.shardIdExtractor)
     ClusterSharding(system).start(
       typeName = BidProcessor.shardName,
-      entryProps = Some(BidProcessor.props(view)),
-      idExtractor = BidProcessor.idExtractor,
-      shardResolver = BidProcessor.shardResolver)
+      entityProps = BidProcessor.props(view),
+      settings = ClusterShardingSettings(system),
+      extractEntityId = BidProcessor.entityIdExtractor,
+      extractShardId = BidProcessor.shardIdExtractor)
   }
 
   "Sharded auction service" must {

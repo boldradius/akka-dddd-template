@@ -1,10 +1,9 @@
 package com.boldradius.cqrs
 
 import akka.actor._
-import akka.contrib.pattern.ShardRegion
-
-import akka.persistence.{RecoveryCompleted, PersistentActor, SnapshotOffer, Update}
+import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer, Update}
 import AuctionCommandQueryProtocol._
+import akka.cluster.sharding.ShardRegion
 import com.boldradius.util.ALogging
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -45,11 +44,11 @@ object BidProcessor {
 
   case class BidFailedEvt(auctionId: String, buyer: String, bidPrice: Double, timeStamp: Long, error: String) extends AuctionEvt
 
-  val idExtractor: ShardRegion.IdExtractor = {
+  val entityIdExtractor: ShardRegion.ExtractEntityId = {
     case m: AuctionCmd => (m.auctionId, m)
   }
 
-  val shardResolver: ShardRegion.ShardResolver = {
+  val shardIdExtractor: ShardRegion.ExtractShardId = {
     case m: AuctionCmd => (math.abs(m.auctionId.hashCode) % 100).toString
   }
 
@@ -60,7 +59,7 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
 
   import BidProcessor._
 
-  override def persistenceId: String = self.path.parent.name + "-" + self.path.name
+  override def persistenceId: String = shardName + "-" + self.path.name
 
   /** passivate the entity when no activity for 1 minute */
   context.setReceiveTimeout(1 minute)

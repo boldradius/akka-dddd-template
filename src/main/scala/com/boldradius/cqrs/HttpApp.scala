@@ -51,7 +51,7 @@ object HttpApp extends App{
 
   implicit val system = ActorSystem("ClusterSystem",config)
 
-  val (processor,view) = ClusterBoot.boot(true)(system)
+  val (processor,view) = ClusterBoot.boot(proxyOnly = true)(system)
 
   val service = system.actorOf( Props( classOf[AuctionHttpActor],processor,view), "cqrs-http-actor")
 

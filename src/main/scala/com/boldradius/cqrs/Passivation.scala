@@ -1,14 +1,14 @@
 package com.boldradius.cqrs
 
-import akka.actor.{PoisonPill, Actor, ReceiveTimeout}
+import akka.actor.{Actor, PoisonPill, ReceiveTimeout}
+import akka.cluster.sharding.ShardRegion.Passivate
 import com.boldradius.util.ALogging
-import akka.contrib.pattern.ShardRegion.Passivate
 
 trait Passivation extends ALogging {
   this: Actor =>
 
   protected def passivate(receive: Receive): Receive = receive.orElse{
-    // tell parent actor to send us a poisinpill
+    // tell parent actor to send us a PoisonPill
     case ReceiveTimeout =>
       self.logInfo( s => s" $s ReceiveTimeout: passivating. ")
       context.parent ! Passivate(stopMessage = PoisonPill)

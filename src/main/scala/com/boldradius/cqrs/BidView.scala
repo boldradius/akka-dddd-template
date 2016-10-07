@@ -1,11 +1,13 @@
 package com.boldradius.cqrs
 
 import akka.actor._
-import akka.contrib.pattern.ShardRegion
 import akka.persistence.PersistentView
 import AuctionCommandQueryProtocol._
+import akka.cluster.sharding.ShardRegion
+import akka.event.LoggingReceive
 import com.boldradius.cqrs.BidProcessor._
 import com.boldradius.util.ALogging
+
 import scala.concurrent.duration._
 
 
@@ -40,12 +42,12 @@ object BidView {
 
   def props():Props = Props(classOf[BidView])
 
-  val idExtractor: ShardRegion.IdExtractor = {
+  val entityIdExtractor: ShardRegion.ExtractEntityId = {
     case m : AuctionEvt => (m.auctionId,m)
     case m : BidQuery => (m.auctionId,m)
   }
 
-  val shardResolver: ShardRegion.ShardResolver = {
+  val shardIdExtractor: ShardRegion.ExtractShardId = {
     case m: AuctionEvt => (math.abs(m.auctionId.hashCode) % 100).toString
     case m: BidQuery => (math.abs(m.auctionId.hashCode) % 100).toString
   }
@@ -62,7 +64,7 @@ class BidView extends PersistentView with ALogging with Passivation {
   override val viewId: String = self.path.parent.name + "-" + self.path.name
 
   /** It is thru this persistenceId that this actor is linked to the PersistentActor's event journal */
-  override val persistenceId: String = "BidProcessor" + "-" + self.path.name
+  override val persistenceId: String = BidProcessor.shardName + "-" + self.path.name
 
   /** passivate the entity when no activity */
   context.setReceiveTimeout(1 minute)
