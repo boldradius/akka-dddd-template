@@ -1,10 +1,9 @@
 package com.boldradius.cqrs
 
 import akka.actor._
-import akka.contrib.pattern.ShardRegion
-
-import akka.persistence.{RecoveryCompleted, PersistentActor, SnapshotOffer, Update}
-import AuctionCommandQueryProtocol._
+import akka.cluster.sharding.ShardRegion
+import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer}
+import com.boldradius.cqrs.AuctionCommandQueryProtocol._
 import com.boldradius.util.ALogging
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -29,7 +28,7 @@ object BidProcessor {
 
   case object Tick
 
-  def props(readRegion: ActorRef): Props = Props(new BidProcessor(readRegion))
+  def props(): Props = Props(new BidProcessor)
 
   sealed trait AuctionEvt {
     val auctionId: String
@@ -45,22 +44,22 @@ object BidProcessor {
 
   case class BidFailedEvt(auctionId: String, buyer: String, bidPrice: Double, timeStamp: Long, error: String) extends AuctionEvt
 
-  val idExtractor: ShardRegion.IdExtractor = {
+  val entityIdExtractor: ShardRegion.ExtractEntityId = {
     case m: AuctionCmd => (m.auctionId, m)
   }
 
-  val shardResolver: ShardRegion.ShardResolver = {
+  val shardIdExtractor: ShardRegion.ExtractShardId = {
     case m: AuctionCmd => (math.abs(m.auctionId.hashCode) % 100).toString
   }
 
   val shardName: String = "BidProcessor"
 }
 
-class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivation with ALogging {
+class BidProcessor extends PersistentActor with Passivation with ALogging {
 
   import BidProcessor._
 
-  override def persistenceId: String = self.path.parent.name + "-" + self.path.name
+  override def persistenceId: String = shardName + "-" + self.path.name
 
   /** passivate the entity when no activity for 1 minute */
   context.setReceiveTimeout(1 minute)
@@ -116,7 +115,6 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
     // ack whether there is an event or not
     processedCommand.event.fold(sender() ! processedCommand.ack) { evt =>
       persist(evt) { persistedEvt =>
-        readRegion ! Update(await = true) // update read path
         sendr ! processedCommand.ack
         processedCommand.newReceive.fold()(context.become) // maybe change state
       }
@@ -154,7 +152,6 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
     case Tick => // end of auction
       val currentTime = System.currentTimeMillis()
       persist(AuctionEndedEvt(state.auctionId, currentTime)) { evt =>
-        readRegion ! Update(await = true)
         context.become(passivate(auctionClosed(updateState(evt, state))).orElse(unknownCommand))
       }
 

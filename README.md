@@ -3,7 +3,7 @@ Akka DDDD template using CQRS/ES with a Distributed Domain
 
 Scala Version = 2.11.6
 
-Akka Version = 2.3.9
+Akka Version = 2.4.11
 
 Spray Version = 1.3.1
 
@@ -21,7 +21,7 @@ This is a pattern that uses Command and Query objects to apply the [CQS](http://
 
 Event Sourcing is an architectural pattern in which state is tracked with an immutable event log instead of
 destructive updates (mutable).
-        
+
 ## Getting Started
 
 To get this application going, you will need to:
@@ -32,10 +32,10 @@ To get this application going, you will need to:
 
 ### DataStore
 
-This application requires a distributed journal. Storage backends for journals and snapshot stores are pluggable in Akka persistence. In this case we are using [Cassandra](http://cassandra.apache.org/download/).
+This application requires a distributed journal. Storage backends for journals and snapshot stores are pluggable in Akka persistence. In this case we are using [Cassandra](http://cassandra.apache.org/download/).  For test & development purposes you may want to use the [Cassandra 3.9 docker image](https://hub.docker.com/_/cassandra/) defined in the `docker-compose.yml` file accompanying this project.
 You can find other journal plugins [here](http://akka.io/community/?_ga=1.264939791.1443869017.1408561680).
 
-The datastore is specified in **application.conf**
+The datastore is specified in **reference.conf** (create an application.conf to override defaults)
 
 cassandra-journal.contact-points = ["127.0.0.1"]
 
@@ -70,7 +70,7 @@ supporting interaction using their logical identifier, without having to care ab
 
 You must first boot some cluster nodes (as many as you want). Running locally, these are distinguished by port  eg:[2551,2552,...].
 
-This cluster must specify one or more **seed nodes** in **application.conf**
+This cluster must specify one or more **seed nodes** in **reference.conf** (create an application.conf to override defaults)
 
     akka.cluster {
     seed-nodes = [
@@ -110,11 +110,13 @@ The HTTP API enables the user to:
 
 #### Create Auction
 
+Create an auction that ends after the current timestamp.
+
         POST http://127.0.0.1:9000/startAuction
 
         {"auctionId":"123",
         "start":"2015-01-20-16:25",
-        "end":"2015-07-20-16:35",
+        "end":"2016-12-20-16:35",
         "initialPrice" : 2,
         "prodId" : "3"}
 
@@ -132,7 +134,7 @@ The HTTP API enables the user to:
 
 #### Query for the bid history
 
-    http://127.0.0.1:9000/bidHistory/123
+    GET http://127.0.0.1:9000/bidHistory/123
 
 ### Spray service fowards to the cluster
 
@@ -172,7 +174,7 @@ and produces events, writing them to the event journal, and notifying the **Quer
                }
              }
         }
-   
+
 This actor is cluster sharded on auctionId as follows:
 
     val idExtractor: ShardRegion.IdExtractor = {
@@ -203,7 +205,7 @@ The timeout is handled in the **Passivation.scala** trait:
     }
 
 
-If this actor fails, or is passivated, and then is required again (to handle a command), the cluster will spin it up, and it will replay the event journal. In this case we make use a var: auctionRecoverStateMaybe to capture the state while we replay. When the replay is finished, the actor is notified with the RecoveryCompleted message and we can then "become" appropriately to reflect this state. 
+If this actor fails, or is passivated, and then is required again (to handle a command), the cluster will spin it up, and it will replay the event journal. In this case we make use a var: auctionRecoverStateMaybe to capture the state while we replay. When the replay is finished, the actor is notified with the RecoveryCompleted message and we can then "become" appropriately to reflect this state.
 
     def receiveRecover: Receive = {
         case evt:AuctionStartedEvt =>
@@ -213,7 +215,7 @@ If this actor fails, or is passivated, and then is required again (to handle a c
               auctionRecoverStateMaybe = auctionRecoverStateMaybe.map(state =>
                 updateState(evt.logInfo("receiveRecover" + _.toString),state))
             }
-        
+
             // Once recovery is complete, check the state to become the appropriate behaviour
             case RecoveryCompleted => {
               auctionRecoverStateMaybe.fold[Unit]({}) { auctionState =>
