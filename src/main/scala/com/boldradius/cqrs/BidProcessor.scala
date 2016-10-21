@@ -115,7 +115,7 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
     // ack whether there is an event or not
     processedCommand.event.fold(sender() ! processedCommand.ack) { evt =>
       persist(evt) { persistedEvt =>
-        readRegion ! Update(await = true) // update read path
+        //readRegion ! Update(await = true) // update read path
         sendr ! processedCommand.ack
         processedCommand.newReceive.fold()(context.become) // maybe change state
       }
@@ -153,7 +153,7 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
     case Tick => // end of auction
       val currentTime = System.currentTimeMillis()
       persist(AuctionEndedEvt(state.auctionId, currentTime)) { evt =>
-        readRegion ! Update(await = true)
+        //readRegion ! Update(await = true)
         context.become(passivate(auctionClosed(updateState(evt, state))).orElse(unknownCommand))
       }
 
