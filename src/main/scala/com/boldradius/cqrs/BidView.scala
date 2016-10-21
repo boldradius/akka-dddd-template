@@ -8,7 +8,6 @@ import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
 import akka.persistence.query.{EventEnvelope, PersistenceQuery}
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Sink, Source}
-import akka.util.Timeout
 import com.boldradius.cqrs.AuctionCommandQueryProtocol._
 import com.boldradius.cqrs.BidProcessor._
 import com.boldradius.util.ALogging
@@ -69,8 +68,6 @@ object BidView {
  */
 class BidView extends Actor with ALogging with Passivation with Stash with PipeToSupport{
 
-  //override val viewId: String = self.path.parent.name + "-" + self.path.name
-
   /** It is thru this persistenceId that this actor is linked to the PersistentActor's event journal */
   val persistenceId: String = BidProcessor.shardName + "-" + self.path.name
 
@@ -86,128 +83,127 @@ class BidView extends Actor with ALogging with Passivation with Stash with PipeT
   context.setReceiveTimeout(1 minute)
 
   private case object Recover
-  private case object RecoverComplete
-  var recoverComplete: Boolean = false
-  var recoverLastSequenceNr: Long = _
+  private case class RecoverComplete(lastSequenceNr: Long, state: Option[BidState])
 
   context.system.scheduler.scheduleOnce(0 seconds, self, Recover)
 
+  /**
+    * Rebuild BidView auction state by loading all the current events received from the BidProcessor.  When complete,
+    * send RecoverComplete to self.
+    */
   private def recoverEvents(): Unit = {
-    import akka.pattern.ask
-
     /** Route events to BidView to rebuild event state **/
     val source: Source[EventEnvelope, NotUsed] =
       readJournal.currentEventsByPersistenceId(persistenceId, fromSequenceNr = 0, toSequenceNr = Long.MaxValue)
-    implicit val askTimeout = Timeout(5.seconds)
 
     source.
-      mapAsync(parallelism = 5) { elem =>
-        log.info(s"BidView recover.  Sequence: ${elem.sequenceNr}, event: $elem")
-        recoverLastSequenceNr = elem.sequenceNr
-        (self ? elem.event).mapTo[akka.Done]
+      fold((0L, None: Option[BidState])) {
+        case ((sequenceNr, state: Option[BidState]), eventEnvelope) =>
+          log.info(s"Recovering event: $eventEnvelope")
+          val newState = handleProcessorEvent(eventEnvelope.event, state)
+          (eventEnvelope.sequenceNr, Option(newState))
       }.
-      runWith(Sink.ignore).map(_ => RecoverComplete).pipeTo(self)
+      runWith(Sink.lastOption).
+      map {
+        case Some((lastSequenceNr, state)) => RecoverComplete(lastSequenceNr, state)
+        case _ => RecoverComplete(0, None)
+      }.pipeTo(self)
   }
 
-  private def streamEvents() = {
-    recoverComplete = true
+  /**
+    * Keep BidView bid state up-to-date by streaming all new events received from the BidProcessor.
+    * @param lastSequenceNr The sequence number of the last event processed by recoverEvents.
+    * @param state The current bid state derived from recoverEvents.
+    */
+  private def streamEvents(lastSequenceNr: Long, state: Option[BidState]): Unit = {
     unstashAll()
-    log.info(s"BidView recover done")
+    updateBehaviour(state)
+    log.info(s"Recover done, lastSequenceNr: $lastSequenceNr")
     val liveSource: Source[EventEnvelope, NotUsed] =
-      readJournal.eventsByPersistenceId(persistenceId, fromSequenceNr = recoverLastSequenceNr + 1, toSequenceNr = Long.MaxValue)
+      readJournal.eventsByPersistenceId(persistenceId, fromSequenceNr = lastSequenceNr + 1, toSequenceNr = Long.MaxValue)
     liveSource.
-      map { elem =>
-        log.info(s"BidView received new event: $elem")
-        self ! elem.event
+      map { eventEnvelope =>
+        log.info(s"Received new event: $eventEnvelope")
+        val newState = handleProcessorEvent(eventEnvelope.event, state)
+        updateBehaviour(Option(newState))
       }.runWith(Sink.ignore)
   }
 
   /**
-   * This is the initial receive method
-   *
-   * It will only process the AuctionStartedEvt or reply to the WinningBidPriceQuery
-   *
-   */
-  def receive: Receive = passivate(initial).orElse(unknownCommand)
+    * Create a new bid state based on events from the BidProcessor.
+    * @param event The event from BidProcessor.
+    * @param state An optional state.  No state will exist if no events have been received from BidProcessor.
+    * @return The new bid state.
+    */
+  private def handleProcessorEvent(event: Any, state: Option[BidState]): BidState = (event, state) match {
+      case (AuctionStartedEvt(auctionId, started, end, initialPrice, prodId), None) =>
+        BidState(auctionId, started, end, initialPrice, prodId)
+      case (e: AuctionEndedEvt, Some(s: BidState)) if !s.closed =>
+        s.copy(closed = true)
+      case (BidPlacedEvt(auctionId, buyer, bidPrice, timeStamp), Some(s: BidState)) if !s.closed =>
+        s.copy(acceptedBids = Bid(bidPrice, buyer, timeStamp) :: s.acceptedBids)
+      case (BidRefusedEvt(auctionId, buyer, bidPrice, timeStamp), Some(s: BidState)) if !s.closed =>
+        s.copy(rejectedBids = Bid(bidPrice, buyer, timeStamp) :: s.rejectedBids)
+      case (_, Some(s)) => s
+    }
 
+  /**
+    * Become the correct query behaviour given the current bid state.
+    * @param state The current bid state.
+    */
+  private def updateBehaviour(state: Option[BidState]): Unit = state match {
+    case Some(s) if s.closed => context.become(passivate(auctionEnded(s)))
+    case Some(s) => context.become(passivate(auctionInProgress(s)))
+    case _ => context.become(passivate(auctionNotStarted))
+  }
+
+  def receive: Receive = passivate(initial)
+
+  /**
+    * This is the initial receive method
+    *
+    * It will only process Recover commands and stash all bid queries until RecoverComplete.
+    */
   def initial: Receive = {
     case Recover => recoverEvents()
+    case RecoverComplete(lastSequenceNr, state) => streamEvents(lastSequenceNr, state)
+    case Status.Failure(t) =>
+      log.error(t, "Could not recover events")
 
-    case _: BidQuery if !recoverComplete =>
-      log.info(s"BidView, recover not complete.  Stashing event.  sender: $sender")
+    case _: BidQuery =>
+      log.info(s"Recover not complete. Stashing event from: $sender")
       stash()
+  }
 
-    case AuctionStartedEvt(auctionId, started, end,initialPrice, prodId) =>
-      val newState = BidState(auctionId, started, end, initialPrice, prodId)
-      context.become(passivate(auctionInProgress(newState)).orElse(unknownCommand))
-      sender() ! akka.Done
-
+  /**
+    * Auction not yet started
+    * @return
+    */
+  def auctionNotStarted: Receive = {
     case WinningBidPriceQuery(auctionId) =>
       sender ! AuctionNotStarted(auctionId)
   }
 
   /**
-   * Also responds to updates to the event journal (AuctionEndedEvt,BidPlacedEvt,BidRefusedEvt), and
-   * updates internal state as well as responding to queries
+   * Responds to all started auction queries
    */
   def auctionInProgress(currentState:BidState):Receive = {
-    case RecoverComplete => streamEvents()
-    case Status.Failure(t) =>
-      log.error(t, "Could not recover events")
-
-    case  GetProdIdQuery(auctionId) =>
+    case GetProdIdQuery(auctionId) =>
       sender ! ProdIdResponse(auctionId,currentState.prodId)
 
-
-    case  GetBidHistoryQuery(auctionId) =>
+    case GetBidHistoryQuery(auctionId) =>
       sender ! BidHistoryResponse(auctionId,currentState.acceptedBids)
 
-    case  WinningBidPriceQuery(auctionId) =>
-      log.info(s"BidView, state recovered.  Replying to WinningBidPriceQuery.  sender: $sender")
+    case WinningBidPriceQuery(auctionId) =>
       currentState.acceptedBids.headOption.fold(
         sender ! WinningBidPriceResponse(auctionId,currentState.product))(b =>
         sender ! WinningBidPriceResponse(auctionId,b.price))
-
-    case e: AuctionEndedEvt  =>
-      val newState = updateState(e, currentState)
-      context.become(passivate(auctionEnded(newState)))
-
-    case e: BidPlacedEvt =>
-      val newState = updateState(e, currentState)
-      context.become(passivate(auctionInProgress(newState)))
-      sender() ! akka.Done
-
-    case e: BidRefusedEvt =>
-      val newState = updateState(e, currentState)
-      context.become(passivate(auctionInProgress(newState)))
-      sender() ! akka.Done
-
-  }
-
-  def auctionEnded(currentState:BidState):Receive = {
-    case _ => {}
-  }
-
-  def unknownCommand:Receive = {
-    case other  => {
-      sender() ! InvalidAuctionAck("","InvalidAuctionAck")
-    }
   }
 
   /**
-    * Updates Bid state
+    * Do nothing once auction has ended.
     */
-  private def updateState(evt: AuctionEvt, state: BidState): BidState = {
-
-    evt match {
-      case _: AuctionEndedEvt  =>
-        state.copy(closed = true)
-      case BidPlacedEvt(auctionId,buyer,bidPrice,timeStamp) =>
-        state.copy(acceptedBids = Bid(bidPrice,buyer, timeStamp) :: state.acceptedBids)
-      case BidRefusedEvt(auctionId,buyer,bidPrice,timeStamp) =>
-        state.copy(rejectedBids = Bid(bidPrice,buyer, timeStamp) :: state.rejectedBids)
-
-      case _ => state
-    }
+  def auctionEnded(currentState:BidState):Receive = {
+    case _ =>
   }
 }

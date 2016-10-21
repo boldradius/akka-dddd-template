@@ -22,13 +22,13 @@ object ClusterBoot {
       val settings = ClusterShardingSettings(system)
       val view = ClusterSharding(system).start(
         typeName = BidView.shardName,
-        entityProps = BidView.props,
+        entityProps = BidView.props(),
         settings = settings,
         extractEntityId = BidView.entityIdExtractor,
         extractShardId = BidView.shardIdExtractor)
       val processor = ClusterSharding(system).start(
         typeName = BidProcessor.shardName,
-        entityProps = BidProcessor.props(view),
+        entityProps = BidProcessor.props(),
         settings = settings,
         extractEntityId = BidProcessor.entityIdExtractor,
         extractShardId = BidProcessor.shardIdExtractor)

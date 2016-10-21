@@ -18,8 +18,7 @@ val baseSettings: Seq[Def.Setting[_]] =
     scalaVersion := "2.11.6",
     ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) },
     org.scalastyle.sbt.PluginKeys.config := file("project/scalastyle-config.xml"),
-    // TODO: turn on -Xfatal-warnings when PersistentView is refactored with PersistenceQuery
-    scalacOptions in Compile ++= Seq("-encoding", "UTF-8", "-target:jvm-1.8", "-deprecation", "-unchecked", "-Ywarn-dead-code"/*, "-Xfatal-warnings"*/, "-feature", "-language:postfixOps"),
+    scalacOptions in Compile ++= Seq("-encoding", "UTF-8", "-target:jvm-1.8", "-deprecation", "-unchecked", "-Ywarn-dead-code", "-Xfatal-warnings", "-feature", "-language:postfixOps"),
     scalacOptions in (Compile, doc) <++= (name in (Compile, doc), version in (Compile, doc)) map DefaultOptions.scaladoc,
     javacOptions in (Compile, compile) ++= Seq("-source", "1.8", "-target", "1.8", "-Xlint:unchecked", "-Xlint:deprecation", "-Xlint:-options"),
     javacOptions in doc := Seq(),

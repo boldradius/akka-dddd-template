@@ -78,13 +78,13 @@ class AuctionServiceSpec extends MultiNodeSpec(AuctionServiceSpec)
 
     val view = ClusterSharding(system).start(
       typeName = BidView.shardName,
-      entityProps = BidView.props,
+      entityProps = BidView.props(),
       settings = ClusterShardingSettings(system),
       extractEntityId = BidView.entityIdExtractor,
       extractShardId = BidView.shardIdExtractor)
     ClusterSharding(system).start(
       typeName = BidProcessor.shardName,
-      entityProps = BidProcessor.props(view),
+      entityProps = BidProcessor.props(),
       settings = ClusterShardingSettings(system),
       extractEntityId = BidProcessor.entityIdExtractor,
       extractShardId = BidProcessor.shardIdExtractor)

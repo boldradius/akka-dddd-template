@@ -1,9 +1,9 @@
 package com.boldradius.cqrs
 
 import akka.actor._
-import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer, Update}
-import AuctionCommandQueryProtocol._
 import akka.cluster.sharding.ShardRegion
+import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer}
+import com.boldradius.cqrs.AuctionCommandQueryProtocol._
 import com.boldradius.util.ALogging
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -28,7 +28,7 @@ object BidProcessor {
 
   case object Tick
 
-  def props(readRegion: ActorRef): Props = Props(new BidProcessor(readRegion))
+  def props(): Props = Props(new BidProcessor)
 
   sealed trait AuctionEvt {
     val auctionId: String
@@ -55,7 +55,7 @@ object BidProcessor {
   val shardName: String = "BidProcessor"
 }
 
-class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivation with ALogging {
+class BidProcessor extends PersistentActor with Passivation with ALogging {
 
   import BidProcessor._
 
@@ -115,7 +115,6 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
     // ack whether there is an event or not
     processedCommand.event.fold(sender() ! processedCommand.ack) { evt =>
       persist(evt) { persistedEvt =>
-        //readRegion ! Update(await = true) // update read path
         sendr ! processedCommand.ack
         processedCommand.newReceive.fold()(context.become) // maybe change state
       }
@@ -153,7 +152,6 @@ class BidProcessor(readRegion: ActorRef) extends PersistentActor with Passivatio
     case Tick => // end of auction
       val currentTime = System.currentTimeMillis()
       persist(AuctionEndedEvt(state.auctionId, currentTime)) { evt =>
-        //readRegion ! Update(await = true)
         context.become(passivate(auctionClosed(updateState(evt, state))).orElse(unknownCommand))
       }
 
